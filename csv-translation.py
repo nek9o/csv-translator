@@ -47,11 +47,15 @@ def translate_csv_column(input_file: str, column_name: str = None, column_index:
         
         for i, text in enumerate(df[target_column], 1):
             if pd.isna(text) or str(text).strip() == "":
-                translated_texts.append("")
+                translated_texts.append("")  # 空のセルはそのまま保持
                 continue
             
-            result = translator.translate_text(str(text), target_lang=target_lang)
-            translated_texts.append(result.text)
+            try:
+                result = translator.translate_text(str(text), target_lang=target_lang)
+                translated_texts.append(result.text)
+            except Exception as e:
+                print(f"警告: 行 {i} の翻訳中にエラーが発生しました: {str(e)}")
+                translated_texts.append(str(text))  # エラー時は元のテキストを保持
             
             if i % 10 == 0 or i == total:
                 print(f"進捗: {i}/{total} ({(i/total*100):.1f}%)")

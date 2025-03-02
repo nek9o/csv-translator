@@ -3,6 +3,7 @@ import deepl
 import logging
 import os
 import time
+import csv
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -77,7 +78,7 @@ def translate_csv_column(input_file: str, column_name: str = None, column_index:
                 logging.info(f"進捗: {i}/{total} ({(i/total*100):.1f}%)")
 
         df[target_column] = translated_texts
-        df.to_csv(output_file, index=False, encoding='utf-8')
+        df.to_csv(output_file, index=False, encoding='utf-8', quoting=csv.QUOTE_ALL)
         logging.info(f"翻訳が完了し、結果を '{output_file}' に保存しました。")
 
     except Exception as e:

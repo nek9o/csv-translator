@@ -21,6 +21,11 @@
 
 1. このリポジトリをクローンまたはダウンロードします。
 
+   ```bash
+   git clone https://github.com/mabo-danmaku/csv-translation.git
+   cd csv-translation-tool
+   ```
+
 2. 必要なパッケージをインストールします：
 
    ```bash

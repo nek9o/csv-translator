@@ -23,7 +23,7 @@
 
    ```bash
    git clone https://github.com/mabo-danmaku/csv-translation.git
-   cd csv-translation-tool
+   cd csv-translation
    ```
 
 2. 必要なパッケージをインストールします：

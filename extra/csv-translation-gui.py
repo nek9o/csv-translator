@@ -22,7 +22,7 @@ def get_api_key() -> str:
 def get_output_path(input_path: str) -> str:
     """Generate output CSV file path with timestamp to avoid overwriting."""
     input_path = Path(input_path)
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
     return str(input_path.parent / f"output_{timestamp}.csv")
 
 def translate_csv(input_file, column_name, column_index, target_lang, has_header):
@@ -89,6 +89,43 @@ def start_translation():
     
     threading.Thread(target=translate_csv, args=(input_file, column_name, column_index, target_lang, has_header), daemon=True).start()
 
+# DeepL言語コードと表示名の辞書
+LANGUAGE_DICT = {
+    "BG": "ブルガリア語",
+    "CS": "チェコ語",
+    "DA": "デンマーク語",
+    "DE": "ドイツ語",
+    "EL": "ギリシャ語",
+    "EN-GB": "英語（イギリス）",
+    "EN-US": "英語（アメリカ）",
+    "EN": "英語",
+    "ES": "スペイン語",
+    "ET": "エストニア語",
+    "FI": "フィンランド語",
+    "FR": "フランス語",
+    "HU": "ハンガリー語",
+    "ID": "インドネシア語",
+    "IT": "イタリア語",
+    "JA": "日本語",
+    "KO": "韓国語",
+    "LT": "リトアニア語",
+    "LV": "ラトビア語",
+    "NB": "ノルウェー語（ブークモール）",
+    "NL": "オランダ語",
+    "PL": "ポーランド語",
+    "PT-BR": "ポルトガル語（ブラジル）",
+    "PT-PT": "ポルトガル語（ポルトガル）",
+    "PT": "ポルトガル語",
+    "RO": "ルーマニア語",
+    "RU": "ロシア語",
+    "SK": "スロバキア語",
+    "SL": "スロベニア語",
+    "SV": "スウェーデン語",
+    "TR": "トルコ語",
+    "UK": "ウクライナ語",
+    "ZH": "中国語（簡体字）"
+}
+
 # GUI setup
 root = tk.Tk()
 root.title("CSV翻訳ツール")
@@ -112,10 +149,25 @@ entry_index.grid(row=3, column=1, padx=5, pady=5)
 
 tk.Label(root, text="翻訳先言語").grid(row=4, column=0, padx=5, pady=5)
 lang_var = tk.StringVar(value="JA")
-language_options = ["JA", "EN", "DE", "FR", "ES", "IT", "NL", "PL", "RU", "ZH"]
-language_dropdown = ttk.Combobox(root, textvariable=lang_var, values=language_options, state="readonly")
+
+# 言語コードと表示名を結合してコンボボックスの項目を作成
+language_display = [f"{code} - {name}" for code, name in LANGUAGE_DICT.items()]
+language_dropdown = ttk.Combobox(root, textvariable=lang_var, values=language_display, state="readonly", width=30)
 language_dropdown.grid(row=4, column=1, padx=5, pady=5)
-language_dropdown.current(0)
+
+# コンボボックスで選択時に言語コードのみを取得する関数
+def on_language_select(event):
+    selected = language_dropdown.get()
+    code = selected.split(" - ")[0]
+    lang_var.set(code)
+
+language_dropdown.bind("<<ComboboxSelected>>", on_language_select)
+
+# 日本語をデフォルト選択
+for i, item in enumerate(language_display):
+    if item.startswith("JA"):
+        language_dropdown.current(i)
+        break
 
 progress_var = tk.DoubleVar()
 progress_bar = ttk.Progressbar(root, variable=progress_var, maximum=100)

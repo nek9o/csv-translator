@@ -23,9 +23,10 @@ def get_api_key() -> str:
     return api_key
 
 def get_output_path(input_path: str) -> str:
-    """Generate output CSV file path in the same directory as input file."""
+    """Generate output CSV file path with timestamp to avoid overwriting."""
     input_path = Path(input_path)
-    return str(input_path.parent / "output.csv")
+    timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+    return str(input_path.parent / f"output_{timestamp}.csv")
 
 def translate_csv_column(input_file: str, column_name: str = None, column_index: int = None, target_lang: str = "JA", has_header: bool = True) -> None:
     """Translate a specific column in a CSV file using DeepL API."""

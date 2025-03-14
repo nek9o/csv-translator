@@ -32,8 +32,19 @@ class DeepLTranslator:
 
     @staticmethod
     def load_supported_languages() -> List[dict]:
-        with open("languages.json", encoding="utf-8") as f:
-            return json.load(f)
+        json_file_path = "languages.json"
+        if not os.path.exists(json_file_path):
+            error_msg = f"エラー: 言語定義ファイル '{json_file_path}' が見つかりません。"
+            logging.error(error_msg)
+            raise FileNotFoundError(error_msg)
+    
+        try:
+            with open(json_file_path, encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            error_msg = f"エラー: 言語定義ファイル '{json_file_path}' の形式が不正です: {str(e)}"
+            logging.error(error_msg)
+            raise
 
     def get_output_path(self, input_path: str) -> str:
         timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")

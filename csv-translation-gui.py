@@ -12,9 +12,6 @@ from dotenv import load_dotenv
 from pathlib import Path
 from typing import List, Optional
 
-# Load environment variables
-load_dotenv()
-
 # Setup logging with custom handler to capture logs for GUI
 class GUILogHandler(logging.Handler):
     def __init__(self, text_widget):
@@ -30,6 +27,9 @@ class GUILogHandler(logging.Handler):
             self.text_widget.configure(state='disabled')
         # Schedule append in the GUI thread
         self.text_widget.after(0, append)
+
+# 起動前に.envファイルの読み込みを試行
+load_dotenv()
 
 class DeepLTranslator:
     def __init__(self, log_widget=None):
@@ -49,12 +49,15 @@ class DeepLTranslator:
 
     @staticmethod
     def load_supported_languages() -> List[dict]:
+        languages_file = "languages.json"
+        if not os.path.exists(languages_file):
+            raise FileNotFoundError(f"言語ファイル '{languages_file}' が見つかりません。")
+            
         try:
-            with open("languages.json", encoding="utf-8") as f:
+            with open(languages_file, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            logging.error(f"言語ファイルの読み込みエラー: {str(e)}")
-            return []
+            raise ValueError(f"言語ファイルの読み込みエラー: {str(e)}")
 
     def get_output_path(self, input_path: str) -> str:
         timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
@@ -130,14 +133,64 @@ class DeepLTranslatorGUI:
         self.root.geometry("700x600")
         self.root.resizable(True, True)
         
-        self.create_widgets()
+        # 初期化
         self.translator = None
         self.translation_thread = None
+        self.log_text = None  # 先にNoneに初期化
         
-        # ロギング設定
-        self.setup_logging()
+        # 必要なファイルの確認
+        try:
+            self.check_required_files()
+            self.create_widgets()
+            self.setup_logging()
+            
+            # アプリケーション開始メッセージ
+            logging.info("アプリケーションが起動しました。")
+        except Exception as e:
+            self.show_startup_error(str(e))
+            return
+    
+    def check_required_files(self):
+        """必要なファイルの存在を確認"""
+        env_file = ".env"
+        languages_file = "languages.json"
+        
+        missing_files = []
+        
+        # カレントディレクトリを表示（デバッグ用）
+        current_dir = os.getcwd()
+        print(f"カレントディレクトリ: {current_dir}")
+        
+        # ファイルパスの絶対パスを取得（デバッグ用）
+        env_path = os.path.abspath(env_file)
+        lang_path = os.path.abspath(languages_file)
+        print(f".envファイルパス: {env_path}")
+        print(f"languages.jsonファイルパス: {lang_path}")
+        
+        if not os.path.isfile(env_file):
+            missing_files.append(f".envファイル（DeepL APIキーを設定してください）")
+        else:
+            # APIキーが設定されているか確認
+            api_key = os.environ.get("DEEPL_AUTH_KEY")
+            if not api_key:
+                missing_files.append(f".envファイル内のDEEPL_AUTH_KEYが設定されていません")
+        
+        if not os.path.isfile(languages_file):
+            missing_files.append(f"languages.jsonファイル（対応言語定義ファイル）")
+            
+        if missing_files:
+            raise FileNotFoundError(f"以下の必須ファイルが見つかりません:\n" + "\n".join(missing_files))
+    
+    def show_startup_error(self, error_message):
+        """起動時エラーを表示してアプリケーションを終了"""
+        messagebox.showerror("起動エラー", f"アプリケーションを起動できません:\n\n{error_message}")
+        self.root.after(100, self.root.destroy)  # 少し遅延して終了
         
     def setup_logging(self):
+        # ロガー設定前にウィジェットが初期化されていることを確認
+        if self.log_text is None:
+            return
+            
         root_logger = logging.getLogger()
         root_logger.setLevel(logging.INFO)
         
@@ -239,17 +292,24 @@ class DeepLTranslatorGUI:
     
     def load_languages(self):
         try:
-            translator = DeepLTranslator()
-            languages = translator.supported_languages
+            # 言語ファイルの読み込みを試行
+            with open("languages.json", encoding="utf-8") as f:
+                languages = json.load(f)
             
             if languages:
                 language_options = [f"{lang['code']} - {lang['name']}" for lang in languages]
                 self.target_lang['values'] = language_options
-                self.target_lang.current(languages.index(next(lang for lang in languages if lang['code'] == 'JA')))
+                
+                # 日本語を初期選択
+                try:
+                    self.target_lang.current(languages.index(next(lang for lang in languages if lang['code'] == 'JA')))
+                except (StopIteration, ValueError):
+                    # 日本語がなければ最初の言語を選択
+                    self.target_lang.current(0)
             else:
-                logging.error("言語リストを読み込めませんでした。")
+                messagebox.showwarning("警告", "言語リストが空です。翻訳に影響する可能性があります。")
         except Exception as e:
-            logging.error(f"言語リスト読み込みエラー: {str(e)}")
+            messagebox.showwarning("警告", f"言語リスト読み込みエラー: {str(e)}")
     
     def browse_file(self):
         filename = filedialog.askopenfilename(
@@ -293,8 +353,13 @@ class DeepLTranslatorGUI:
         self.progress_bar['value'] = 0
         
         # 翻訳オブジェクトの初期化
-        self.translator = DeepLTranslator(self.log_text)
-        self.translator.set_progress_callback(self.update_progress)
+        try:
+            self.translator = DeepLTranslator(self.log_text)
+            self.translator.set_progress_callback(self.update_progress)
+        except Exception as e:
+            messagebox.showerror("エラー", f"翻訳機能の初期化に失敗しました: {str(e)}")
+            self.enable_controls(True)
+            return
         
         # 翻訳パラメータの準備
         target_lang_code = self.target_lang.get().split(' - ')[0].strip()

@@ -8,9 +8,10 @@ import time
 import csv
 import json
 import threading
+import chardet
 from dotenv import load_dotenv
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 # Setup logging with custom handler to capture logs for GUI
 class GUILogHandler(logging.Handler):
@@ -39,6 +40,12 @@ class DeepLTranslator:
         self.log_widget = log_widget
         self.progress_callback = None
         self.stop_translation = False
+        # 一般的なエンコーディングリストを追加
+        self.common_encodings = [
+            'auto', 'utf-8', 'utf-8-sig', 'shift-jis', 'cp932', 'euc-jp', 
+            'iso-2022-jp', 'latin-1', 'ascii', 'utf-16', 'utf-16-le', 'utf-16-be',
+            'cp1252', 'gb2312', 'big5', 'euc-kr'
+        ]
 
     @staticmethod
     def get_api_key() -> str:
@@ -63,6 +70,46 @@ class DeepLTranslator:
         timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
         return str(Path(input_path).parent / f"output_{timestamp}.csv")
 
+    def detect_encoding(self, file_path: str) -> Tuple[str, float]:
+        """ファイルのエンコーディングを検出する"""
+        with open(file_path, 'rb') as f:
+            result = chardet.detect(f.read())
+        return result['encoding'], result['confidence']
+    
+    def try_read_csv(self, file_path: str, encoding: str = None) -> Tuple[pd.DataFrame, str]:
+        """指定されたエンコーディングでCSVファイルを読み込む、失敗したら自動検出を試みる"""
+        if encoding and encoding != "auto":
+            try:
+                df = pd.read_csv(file_path, encoding=encoding)
+                logging.info(f"エンコーディング '{encoding}' でファイルを読み込みました。")
+                return df, encoding
+            except UnicodeDecodeError:
+                logging.warning(f"指定されたエンコーディング '{encoding}' でファイルを読み込めませんでした。自動検出を試みます。")
+                
+        # 自動検出を試みる
+        detected_encoding, confidence = self.detect_encoding(file_path)
+        logging.info(f"エンコーディングを検出しました: {detected_encoding} (信頼度: {confidence:.2f})")
+        
+        # 検出したエンコーディングで読み込みを試みる
+        try:
+            df = pd.read_csv(file_path, encoding=detected_encoding)
+            return df, detected_encoding
+        except (UnicodeDecodeError, pd.errors.ParserError) as e:
+            logging.warning(f"検出したエンコーディングでも読み込めませんでした: {str(e)}")
+            
+            # 一般的なエンコーディングでの読み込みを試みる
+            for enc in self.common_encodings:
+                if enc != "auto" and enc != detected_encoding:  # "auto"と既に試したエンコーディングはスキップ
+                    try:
+                        df = pd.read_csv(file_path, encoding=enc)
+                        logging.info(f"エンコーディング '{enc}' で正常に読み込みました。")
+                        return df, enc
+                    except (UnicodeDecodeError, pd.errors.ParserError):
+                        continue
+                        
+            # すべて失敗した場合
+            raise ValueError(f"ファイル '{file_path}' を読み込めるエンコーディングが見つかりませんでした。")
+
     def translate_csv_column(self, input_file: str, column_name: Optional[str] = None, 
                              column_index: Optional[int] = None, target_lang: str = "JA", 
                              has_header: bool = True, encoding: str = 'utf-8', log_interval: int = 10):
@@ -70,8 +117,14 @@ class DeepLTranslator:
         self.stop_translation = False
 
         try:
-            df = pd.read_csv(input_file, encoding=encoding, header=0 if has_header else None)
+            # エンコーディングの自動検出または検証
+            logging.info(f"ファイル '{input_file}' を読み込んでいます...")
+            df, used_encoding = self.try_read_csv(input_file, encoding)
+            logging.info(f"エンコーディング '{used_encoding}' でファイルを読み込みました。")
+            
+            # ヘッダーの処理
             if not has_header:
+                df = pd.read_csv(input_file, encoding=used_encoding, header=None)
                 df.columns = [f"Column_{i}" for i in range(len(df.columns))]
 
             target_column = self.determine_column(df, column_name, column_index)
@@ -130,7 +183,7 @@ class DeepLTranslatorGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("DeepL CSV翻訳ツール")
-        self.root.geometry("700x600")
+        self.root.geometry("700x650")  # エンコーディング設定の追加に合わせてウィンドウサイズを調整
         self.root.resizable(True, True)
         
         # 初期化
@@ -184,7 +237,7 @@ class DeepLTranslatorGUI:
     def show_startup_error(self, error_message):
         """起動時エラーを表示してアプリケーションを終了"""
         messagebox.showerror("起動エラー", f"アプリケーションを起動できません:\n\n{error_message}")
-        self.root.after(100, self.root.destroy)  # 少し遅延して終了
+        self.root.after(100, self.root.destroy())  # 少し遅延して終了
         
     def setup_logging(self):
         # ロガー設定前にウィジェットが初期化されていることを確認
@@ -230,6 +283,21 @@ class DeepLTranslatorGUI:
         self.has_header = tk.BooleanVar(value=True)
         ttk.Checkbutton(file_frame, text="ヘッダー行あり", variable=self.has_header).grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
         
+        # エンコーディング選択セクション（新規追加）
+        encoding_frame = ttk.LabelFrame(main_frame, text="ファイルエンコーディング", padding="5")
+        encoding_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(encoding_frame, text="エンコーディング:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.encoding = ttk.Combobox(encoding_frame, width=20)
+        self.encoding.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        # 初期化用のトランスレータインスタンスを一時的に作成
+        temp_translator = DeepLTranslator()
+        self.encoding['values'] = temp_translator.common_encodings
+        self.encoding.current(0)  # 'auto'を初期選択
+        
+        ttk.Label(encoding_frame, text="※「auto」を選択すると自動検出を試みます").grid(row=1, column=0, columnspan=2, sticky=tk.W, padx=5)
+        
         # 列選択セクション
         column_frame = ttk.LabelFrame(main_frame, text="翻訳する列の選択", padding="5")
         column_frame.pack(fill=tk.X, pady=5)
@@ -264,6 +332,10 @@ class DeepLTranslatorGUI:
         
         self.stop_button = ttk.Button(button_frame, text="中止", command=self.stop_translation, state=tk.DISABLED)
         self.stop_button.pack(side=tk.LEFT, padx=5)
+        
+        # 検出エンコーディング表示ボタン
+        self.detect_encoding_button = ttk.Button(button_frame, text="ファイルエンコーディング検出", command=self.detect_file_encoding)
+        self.detect_encoding_button.pack(side=tk.LEFT, padx=5)
         
         # プログレスバー
         progress_frame = ttk.Frame(main_frame)
@@ -319,6 +391,33 @@ class DeepLTranslatorGUI:
         if filename:
             self.file_path.set(filename)
     
+    def detect_file_encoding(self):
+        """選択されたファイルのエンコーディングを検出してユーザーに通知"""
+        if not self.file_path.get():
+            messagebox.showerror("エラー", "CSVファイルを選択してください。")
+            return
+            
+        try:
+            # 一時的なトランスレータインスタンスを作成
+            temp_translator = DeepLTranslator()
+            detected_encoding, confidence = temp_translator.detect_encoding(self.file_path.get())
+            
+            # エンコーディング情報をユーザーに表示
+            messagebox.showinfo(
+                "エンコーディング検出結果", 
+                f"検出されたエンコーディング: {detected_encoding}\n信頼度: {confidence:.2f}\n\n"
+                f"※このエンコーディングを使用する場合は、ドロップダウンから選択してください。\n"
+                f"※検出された結果がドロップダウンにない場合は「auto」を選択してください。"
+            )
+            
+            # 検出されたエンコーディングがドロップダウンリストにある場合、自動選択
+            encoding_values = self.encoding['values']
+            if detected_encoding in encoding_values:
+                self.encoding.set(detected_encoding)
+            
+        except Exception as e:
+            messagebox.showerror("エラー", f"エンコーディング検出中にエラーが発生しました: {str(e)}")
+    
     def update_progress(self, value):
         self.progress_bar['value'] = value * 100
     
@@ -328,6 +427,7 @@ class DeepLTranslatorGUI:
         
         self.start_button['state'] = state
         self.stop_button['state'] = disabled_state
+        self.detect_encoding_button['state'] = state
     
     def start_translation(self):
         if not self.file_path.get():
@@ -376,6 +476,9 @@ class DeepLTranslatorGUI:
                 self.enable_controls(True)
                 return
         
+        # エンコーディングの取得
+        encoding = self.encoding.get()
+        
         # 翻訳処理を別スレッドで実行
         self.translation_thread = threading.Thread(
             target=self.run_translation,
@@ -385,7 +488,7 @@ class DeepLTranslatorGUI:
                 column_index,
                 target_lang_code,
                 self.has_header.get(),
-                'utf-8',
+                encoding,
                 log_interval
             )
         )

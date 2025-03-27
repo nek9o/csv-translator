@@ -179,95 +179,105 @@ class DeepLTranslator:
 if __name__ == "__main__":
     translator = DeepLTranslator()
 
-    print("DeepL翻訳ツール")
-    print("1: CSVファイルの列を翻訳する")
-    print("2: 利用可能な言語一覧を表示する")
-    print("3: 利用可能なエンコーディング一覧を表示する")
-    print("0: 終了")
-    
-    choice = input("選択してください: ").strip()
-    
-    if choice == "1":
-        # 1. ファイルパスの入力
-        input_path = input("翻訳したいCSVファイルのパスを入力してください: ").strip()
-        if not os.path.exists(input_path) or not input_path.endswith('.csv'):
-            logging.error("エラー: 有効なCSVファイルを指定してください。")
-            exit(1)
+    while True:
+        print("\nDeepL翻訳ツール")
+        print("1: CSVファイルの列を翻訳する")
+        print("2: 利用可能な言語一覧を表示する")
+        print("3: 利用可能なエンコーディング一覧を表示する")
+        print("0: 終了")
+        
+        choice = input("選択してください: ").strip()
+        
+        if choice == "1":
+            # 1. ファイルパスの入力
+            input_path = input("翻訳したいCSVファイルのパスを入力してください: ").strip()
+            if not os.path.exists(input_path) or not input_path.endswith('.csv'):
+                logging.error("エラー: 有効なCSVファイルを指定してください。")
+                continue
+                
+            # 2. エンコーディングの選択
+            print("エンコーディングの指定:")
+            print("1: 自動検出 (推奨)")
+            print("2: 手動指定")
+            encoding_choice = input("選択してください: ").strip()
             
-        # 2. エンコーディングの選択
-        print("エンコーディングの指定:")
-        print("1: 自動検出 (推奨)")
-        print("2: 手動指定")
-        encoding_choice = input("選択してください: ").strip()
-        
-        if encoding_choice == "1":
-            encoding = "auto"
-        elif encoding_choice == "2":
-            translator.show_supported_encodings()
-            encoding_index = input("使用するエンコーディングの番号を入力してください: ").strip()
-            try:
-                encoding_index = int(encoding_index) - 1
-                if 0 <= encoding_index < len(translator.common_encodings):
-                    encoding = translator.common_encodings[encoding_index]
-                else:
-                    logging.error("エラー: 無効なエンコーディング番号です。")
-                    exit(1)
-            except ValueError:
-                logging.error("エラー: 番号を整数で入力してください。")
-                exit(1)
-        else:
-            logging.error("エラー: 無効な選択です。")
-            exit(1)
+            if encoding_choice == "1":
+                encoding = "auto"
+            elif encoding_choice == "2":
+                translator.show_supported_encodings()
+                encoding_index = input("使用するエンコーディングの番号を入力してください: ").strip()
+                try:
+                    encoding_index = int(encoding_index) - 1
+                    if 0 <= encoding_index < len(translator.common_encodings):
+                        encoding = translator.common_encodings[encoding_index]
+                    else:
+                        logging.error("エラー: 無効なエンコーディング番号です。")
+                        continue
+                except ValueError:
+                    logging.error("エラー: 番号を整数で入力してください。")
+                    continue
+            else:
+                logging.error("エラー: 無効な選択です。")
+                continue
+                
+            # 3. CSVファイルにヘッダー行があるかどうかの確認
+            has_header = input("CSVファイルにヘッダー行がありますか？ (y/n): ").strip().lower() == "y"
             
-        # 3. CSVファイルにヘッダー行があるかどうかの確認
-        has_header = input("CSVファイルにヘッダー行がありますか？ (y/n): ").strip().lower() == "y"
-        
-        # 4. 列の指定方法
-        method = input("列の指定方法を選択してください（1: 列名, 2: インデックス）: ").strip()
-        
-        # 5. 列の指定
-        column_name = None
-        column_index = None
-        
-        if method == "1":
-            column_name = input("翻訳する列名を入力してください: ").strip()
-        elif method == "2":
+            # 4. 列の指定方法
+            method = input("列の指定方法を選択してください（1: 列名, 2: インデックス）: ").strip()
+            
+            # 5. 列の指定
+            column_name = None
+            column_index = None
+            
+            if method == "1":
+                column_name = input("翻訳する列名を入力してください: ").strip()
+            elif method == "2":
+                try:
+                    column_index = int(input("翻訳する列のインデックスを入力してください（0始まり）: ").strip())
+                except ValueError:
+                    logging.error("エラー: インデックスは整数で入力してください。")
+                    continue
+            else:
+                logging.error("エラー: 無効な選択です。")
+                continue
+            
+            # 6. 言語一覧の表示と言語コードの指定
+            translator.show_supported_languages()
+            target_lang = input("翻訳先の言語コードを入力してください (例: JA): ").strip().upper()
+            
+            # 7. ログの間隔の指定
             try:
-                column_index = int(input("翻訳する列のインデックスを入力してください（0始まり）: ").strip())
+                log_interval = int(input("進捗を表示する間隔（行数）を入力してください (例: 10): ").strip())
             except ValueError:
-                logging.error("エラー: インデックスは整数で入力してください。")
-                exit(1)
-        else:
-            logging.error("エラー: 無効な選択です。")
-            exit(1)
-        
-        # 6. 言語一覧の表示と言語コードの指定
-        translator.show_supported_languages()
-        target_lang = input("翻訳先の言語コードを入力してください (例: JA): ").strip().upper()
-        
-        # 7. ログの間隔の指定
-        try:
-            log_interval = int(input("進捗を表示する間隔（行数）を入力してください (例: 10): ").strip())
-        except ValueError:
-            logging.warning("警告: 入力が無効です。デフォルト値(10)を使用します。")
-            log_interval = 10
+                logging.warning("警告: 入力が無効です。デフォルト値(10)を使用します。")
+                log_interval = 10
 
-        # 翻訳実行
-        translator.translate_csv_column(
-            input_path, 
-            column_name=column_name, 
-            column_index=column_index, 
-            target_lang=target_lang, 
-            has_header=has_header,
-            encoding=encoding,
-            log_interval=log_interval
-        )
+            # 翻訳実行
+            translator.translate_csv_column(
+                input_path, 
+                column_name=column_name, 
+                column_index=column_index, 
+                target_lang=target_lang, 
+                has_header=has_header,
+                encoding=encoding,
+                log_interval=log_interval
+            )
+
+            # 続けるかどうかを確認
+            continue_choice = input("続けますか？ (y/n): ").strip().lower()
+            if continue_choice != 'y':
+                break
+                
+        elif choice == "2":
+            translator.show_supported_languages()
             
-    elif choice == "2":
-        translator.show_supported_languages()
-    elif choice == "3":
-        translator.show_supported_encodings()
-    elif choice == "0":
-        print("プログラムを終了します。")
-    else:
-        logging.error("エラー: 無効な選択です。")
+        elif choice == "3":
+            translator.show_supported_encodings()
+            
+        elif choice == "0":
+            print("プログラムを終了します。")
+            break
+            
+        else:
+            logging.error("エラー: 無効な選択です。")

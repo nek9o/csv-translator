@@ -169,6 +169,14 @@ GUI版の詳細な使用方法については、[GUI版README](GUI_README.md)を
 ## 📜 ライセンス
 このプロジェクトは MIT ライセンスの下で公開されています。
 
+## 使用ライブラリ
+このソフトウェアは以下のライブラリを使用しています:
+
+- pandas (BSD License)
+- deepl
+- chardet (LGPL License)
+- python-dotenv (MIT License)
+
 ---
 
 ## ⚖ 免責事項
